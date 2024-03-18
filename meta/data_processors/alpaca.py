@@ -81,7 +81,7 @@ class Alpaca(_Base):
             for tic in ticker_list:
                 barset = self.api.get_bars(
                     tic,
-                    time_interval,
+                    self.time_interval,
                     start=start_time,
                     end=end_time,
                     limit=500,
