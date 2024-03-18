@@ -65,9 +65,6 @@ class Alpaca(_Base):
     def download_data(
         self,
         ticker_list,
-        start_date,
-        end_date,
-        time_interval,
         save_path: str = "./data/dataset.csv",
     ) -> pd.DataFrame:
         self.time_zone = calc_time_zone(
@@ -75,7 +72,6 @@ class Alpaca(_Base):
         )
         start_date = pd.Timestamp(self.start_date, tz=self.time_zone)
         end_date = pd.Timestamp(self.end_date, tz=self.time_zone) + pd.Timedelta(days=1)
-        self.time_interval = time_interval
 
         date = start_date
         data_df = pd.DataFrame()
