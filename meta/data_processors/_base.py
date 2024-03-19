@@ -9,7 +9,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 import stockstats
-import talib
+
 
 from meta.config import BINANCE_BASE_URL
 from meta.config import TIME_ZONE_BERLIN
@@ -154,7 +154,8 @@ class _Base:
 
     # select_stockstats_talib: 0 (stockstats, default), or 1 (use talib). Users can choose the method.
     # drop_na_timestep: 0 (not dropping timesteps that contain nan), or 1 (dropping timesteps that contain nan, default). Users can choose the method.
-    def add_technical_indicator(
+    
+    '''def add_technical_indicator(
         self,
         tech_indicator_list: List[str],
         select_stockstats_talib: int = 0,
@@ -244,7 +245,7 @@ class _Base:
             ].time.unique()
             self.dataframe = self.dataframe[~self.dataframe.time.isin(time_to_drop)]
         print("Succesfully add technical indicators")
-
+'''
     def add_turbulence(self):
         """
         add turbulence index from a precalcualted dataframe

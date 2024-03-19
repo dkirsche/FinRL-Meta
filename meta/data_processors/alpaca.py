@@ -1,6 +1,9 @@
 from typing import List
+from stockstats import StockDataFrame as Sdf
 
-import alpaca_trade_api as tradeapi
+from alpaca.data.historical import CryptoHistoricalDataClient
+from alpaca.data.requests import CryptoBarsRequest
+from alpaca.data.timeframe import TimeFrame
 import numpy as np
 import pandas as pd
 import pytz
@@ -32,14 +35,6 @@ from meta.config import (
 
 
 class Alpaca(_Base):
-    # def __init__(self, API_KEY=None, API_SECRET=None, API_BASE_URL=None, api=None):
-    #     if api is None:
-    #         try:
-    #             self.api = tradeapi.REST(API_KEY, API_SECRET, API_BASE_URL, "v2")
-    #         except BaseException:
-    #             raise ValueError("Wrong Account Info!")
-    #     else:
-    #         self.api = api
     def __init__(
         self,
         data_source: str,
@@ -49,18 +44,10 @@ class Alpaca(_Base):
         **kwargs,
     ):
         super().__init__(data_source, start_date, end_date, time_interval, **kwargs)
-        if kwargs["API"] is None:
-            try:
-                self.api = tradeapi.REST(
-                    kwargs["API_KEY"],
-                    kwargs["API_SECRET"],
-                    kwargs["API_BASE_URL"],
-                    "v2",
-                )
-            except BaseException:
-                raise ValueError("Wrong Account Info!")
-        else:
-            self.api = kwargs["API"]
+        # no keys required for crypto data
+        self.client = CryptoHistoricalDataClient()
+        self.api_key =  kwargs["API_KEY"]
+        self.api_secret = kwargs["API_SECRET"]
 
     def download_data(
         self,
@@ -72,36 +59,26 @@ class Alpaca(_Base):
         )
         start_date = pd.Timestamp(self.start_date, tz=self.time_zone)
         end_date = pd.Timestamp(self.end_date, tz=self.time_zone) + pd.Timedelta(days=1)
+        timeframe = self.time_interval
+        
+        request_params = CryptoBarsRequest(
+                symbol_or_symbols=ticker_list,
+                timeframe=timeframe,
+                start=start_date,
+                end=end_date
+            )
 
-        date = start_date
-        data_df = pd.DataFrame()
-        while date != end_date:
-            start_time = (date + pd.Timedelta("09:30:00")).isoformat()
-            end_time = (date + pd.Timedelta("15:59:00")).isoformat()
-            for tic in ticker_list:
-                barset = self.api.get_bars(
-                    tic,
-                    self.time_interval,
-                    start=start_time,
-                    end=end_time,
-                    limit=500,
-                ).df
-                barset["tic"] = tic
-                barset = barset.reset_index()
-                data_df = data_df.append(barset)
-            print(("Data before ") + end_time + " is successfully fetched")
-            # print(data_df.head())
-            date = date + pd.Timedelta(days=1)
-            if date.isoformat()[-14:-6] == "01:00:00":
-                date = date - pd.Timedelta("01:00:00")
-            elif date.isoformat()[-14:-6] == "23:00:00":
-                date = date + pd.Timedelta("01:00:00")
-            if date.isoformat()[-14:-6] != "00:00:00":
-                raise ValueError("Timezone Error")
-
+        bars = self.client.get_crypto_bars(request_params)
+        
+        data_df = bars.df
+        data_df.reset_index(inplace=True)
+        print(data_df)
+        
         data_df["time"] = data_df["timestamp"].apply(
             lambda x: x.strftime("%Y-%m-%d %H:%M:%S")
         )
+        data_df = data_df.rename(columns={"time": "date"})
+        data_df = data_df.rename(columns={"symbol": "tic"})
         self.dataframe = data_df
 
         self.save_data(save_path)
@@ -192,45 +169,31 @@ class Alpaca(_Base):
 
         self.dataframe = new_df
 
-    # def add_technical_indicator(
-    #     self,
-    #     df,
-    #     tech_indicator_list=[
-    #         "macd",
-    #         "boll_ub",
-    #         "boll_lb",
-    #         "rsi_30",
-    #         "dx_30",
-    #         "close_30_sma",
-    #         "close_60_sma",
-    #     ],
-    # ):
-    #     df = df.rename(columns={"time": "date"})
-    #     df = df.copy()
-    #     df = df.sort_values(by=["tic", "date"])
-    #     stock = Sdf.retype(df.copy())
-    #     unique_ticker = stock.tic.unique()
-    #     tech_indicator_list = tech_indicator_list
-    #
-    #     for indicator in tech_indicator_list:
-    #         indicator_df = pd.DataFrame()
-    #         for i in range(len(unique_ticker)):
-    #             # print(unique_ticker[i], i)
-    #             temp_indicator = stock[stock.tic == unique_ticker[i]][indicator]
-    #             temp_indicator = pd.DataFrame(temp_indicator)
-    #             temp_indicator["tic"] = unique_ticker[i]
-    #             # print(len(df[df.tic == unique_ticker[i]]['date'].to_list()))
-    #             temp_indicator["date"] = df[df.tic == unique_ticker[i]][
-    #                 "date"
-    #             ].to_list()
-    #             indicator_df = indicator_df.append(temp_indicator, ignore_index=True)
-    #         df = df.merge(
-    #             indicator_df[["tic", "date", indicator]], on=["tic", "date"], how="left"
-    #         )
-    #     df = df.sort_values(by=["date", "tic"])
-    #     df = df.rename(columns={"date": "time"})
-    #     print("Succesfully add technical indicators")
-    #     return df
+    def add_technical_indicator(
+         self,
+         tech_indicator_list=[
+             "macd",
+             "boll_ub",
+             "boll_lb",
+             "rsi_30",
+             "dx_30",
+             "close_30_sma",
+             "close_60_sma",
+            ],
+        save_path: str = "./data/dataset_tech.csv"):
+       
+        df = self.dataframe.copy()
+        print(f"df: {df}")
+        df = df.sort_values(by=["tic", "date"])
+        stock = Sdf.retype(df)
+        unique_ticker = stock.tic.unique()
+    
+        for indicator in tech_indicator_list:
+            stock.get(indicator)
+            # Update self.dataframe with the technical indicators added
+            self.dataframe = stock
+        print("Succesfully added technical indicators")
+        self.save_data(save_path)
 
     # def add_vix(self, data):
     #     vix_df = self.download_data(["VIXY"], self.start, self.end, self.time_interval)
